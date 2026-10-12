@@ -1,208 +1,150 @@
-# 搭建私人魔法节点 · by Nar
+# 私人魔法上网节点 · by Nar
 
-> 让 AI 带新手比较并购买海外服务器，直到自己的客户端真实可用。
+> 让 AI 帮你选服务器、搭好节点，并检查手机或电脑能否正常使用。
 
-这个 Skill 面向不懂服务器、但希望拥有个人独立出口的人。你说明预算、所在地区、设备和主要用途；AI 负责比较 VPS、核对费用、部署服务端、适配客户端、独立分流、真实验收、备份和跨设备交付。付款、实名、验证码、断流和关键安全动作始终由你确认。
+想自己租一台海外服务器，通过它上网，但不懂怎么选、怎么安装、怎么接到设备上？这个 Skill 把实际搭建中的步骤和排查方法交给 AI，让它从你当前做到的地方继续处理。
 
-**Created by [Nar / 那不然](https://github.com/Nar101)** · [v0.6.0 Release](https://github.com/Nar101/deploy-private-proxy-node/releases/tag/v0.6.0)
+仓库提供的是一套给 **Codex、Claude Code 等 AI 工具使用的操作说明和辅助脚本**。安装后，在对话里告诉 AI 你的目标，它会按流程查资料、配置服务器、准备导入文件和测试连接。服务器、上网客户端和对应账号由你准备，AI 在你允许的范围内操作。
 
-本项目只处理个人或极少数受信任设备的合法使用，不搭机场、不售卖、不开放注册或公网订阅。
+**作者：[Nar / 那不然](https://github.com/Nar101)** · [v0.6.0 发布说明](https://github.com/Nar101/deploy-private-proxy-node/releases/tag/v0.6.0)
 
-## v0.6.0 解决了什么
+## 安装并开始使用
 
-旧流程容易停在“服务器安装成功”，但用户的 Shadowrocket 或其他客户端仍不可用。v0.6.0 把购买后的交付重构为七个证据门：
-
-```text
-G0 采购确认
-→ G1 实例与 SSH 就绪
-→ G2 服务端基线
-→ G3 Reality 公网协议
-→ G4 原生客户端
-→ G5 独立分流与真实业务
-→ G6 备份与跨设备交付
-```
-
-前一门没有证据，不进入后一门，也不提前报告完成。
-
-本版重点加入：
-
-- Reality 客户端版本边界预检；
-- Shadowrocket UI、节点、规则、隧道四层真相；
-- 新服务器 IP 的 TUN 防回环检查；
-- 不切换全局节点的独立测试组；
-- 以“服务器是否收到连接、Reality 是否认证”为主干的故障树；
-- 服务器本地看门狗保护的调试窗口；
-- 出口、目标服务、下载与路由证据的结构化验收；
-- 不含 SSH 私钥的跨设备文件包。
-
-## 30 秒开始
+安装命令需要 Node.js 和 `npx`。在终端运行：
 
 ```bash
-npx skills add Nar101/deploy-private-proxy-node
+npx -y skills add Nar101/deploy-private-proxy-node
 ```
 
-安装后可以说：
+按提示选择要安装到的 AI 工具和安装范围。根据任务，AI 还需要能够读取网页、执行终端命令，并通过 SSH 连接服务器。SSH 是远程管理服务器的连接方式；具体登录配置可以交给 AI 处理，账号验证和权限弹窗需要你接手。
+
+### 还没买服务器
+
+安装后，可以直接把下面这段交给 AI，补上自己的信息：
 
 ```text
-使用 deploy-private-proxy-node，按交付门带我比较并购买海外 VPS，
-部署私人节点，完成原生客户端、独立分流、真实出口、目标服务、
-备份和跨设备文件交付；所有付费、断流和关键安全动作都先等我确认。
+使用 $deploy-private-proxy-node。
+我想搭一个自己用的美国上网节点，但不懂服务器。
+我在什么地区，用哪家运营商，预算每月多少，设备是 Mac、Windows 或手机。
+请先推荐服务器并解释费用，购买后继续搭建、导入和测试。
+先让几个测试网站走新节点，不要切换我现在的主连接。
 ```
 
-## 工作模式
+### 已有服务器，或节点连不上
 
-| 模式 | 适用场景 |
+说明你已有的服务器、系统、客户端和报错，让 AI 从对应步骤继续。例如：
+
+```text
+使用 $deploy-private-proxy-node。
+我已经买了服务器，请帮我搭好并导入现有客户端。
+先检查服务器上有没有其他正在用的服务，再操作。
+```
+
+```text
+使用 $deploy-private-proxy-node。
+我的节点已经导入小火箭，但连接失败。
+请查清原因并修复，保留我现在能用的网络连接。
+```
+
+私钥、密码和完整节点链接保存在本机安全位置，让 AI 使用文件路径；不要贴到公开聊天、Issue 或仓库里。
+
+## 它会帮你完成哪些事
+
+| 你要做的事 | AI 按这个 Skill 处理的内容 |
 | --- | --- |
-| `new-deploy` | VPS 比较、购买到完整交付 |
-| `clone` | 在新 VPS 复制已验证架构并重建凭证 |
-| `diagnose` | 节点超时、Reality/VLESS、路由或目标服务故障 |
-| `maintain` | 审计、备份、升级、换 IP 和恢复 |
-| `client-adapt` | 为现有节点接入新客户端或新设备 |
+| 选服务器 | 按预算、地区、运营商和用途比较方案，核对首购、续费、流量和退款条件 |
+| 搭节点 | 检查现有系统，安装和配置服务，核对端口及防火墙 |
+| 导入设备 | 为现有客户端准备配置，核对导入结果 |
+| 确认能用 | 测试网页连接、服务器出口和指定网站是否经过新节点 |
+| 修复故障 | 先读取客户端和服务器的连接记录，再处理对应问题 |
+| 备份或换设备 | 保存必要配置，需要时生成受限文件包，并在新设备上重新测试 |
 
-## 为什么这版更快
+已有服务器时直接从配置开始；已有可用服务时只处理新设备或故障。跨设备、测速和特定网站测试，按你的实际需求执行。
 
-第一次失败先问两个问题：
+## 测试时，怎样保留原来的网络
 
-1. 服务器是否收到客户端连接？
-2. 收到后 Reality 是否认证成功？
+先让少量测试网站走新节点，其他访问继续使用原来的连接。确认测试请求确实经过新服务器后，再由你决定是否正式切换。
 
-这会把故障快速分成：
+只有服务器显示“运行中”或客户端显示“导入成功”，还不能算完成。AI 需要检查：
 
-- 服务器前路径：公网 IP、云防火墙、TUN 防回环、节点保存态、隧道快照；
-- Reality 认证：凭证哈希、SNI、short ID、时间和客户端版本边界；
-- VLESS/XTLS：UUID、Vision flow、TCP 与客户端序列化；
-- 业务路由：规则顺序、代理组委托和真实出口。
+- 你实际使用的客户端能否完成连接；
+- 测试请求显示的出口 IP 是否等于新服务器的 IP；
+- 指定网站是否按规则使用新节点，原来的连接是否保持正常。
 
-没有新证据时，Skill 会拒绝反复更换端口、指纹、核心版本、target 或协议。
+需要短暂断网或重启连接时，先说明影响、取得许可并确认恢复办法。网页或 API 能连通，也不等于账号登录和会员服务已经通过测试。
 
-## Reality 版本兼容
+## 费用和需要你完成的操作
 
-截至 2026-07-28，Xray-core 当前源码在 `minClientVer` 留空时会应用默认最低客户端版本 `26.3.27`，其他 Reality 客户端可能被拒绝。Skill 会检查 Xray 实际加载配置和服务端记录的握手 `ClientVer`，只有证据闭合后才建议单变量放宽。
+Skill 免费开源。服务器租金、部分客户端、换 IP 或额外流量可能收费。AI 会先说明当前费用、付款周期和续费条件；每次付款前再核对要买的项目和金额。
 
-这里的 `ClientVer` 是 Reality 握手值，不一定等于 GUI 应用商店版本。显式降低最低版本还伴随 Xray 官方安全警告，因此不是所有部署的无条件默认。
+付款、实名、验证码、自动续费选择和重要网络变更由你确认。需要手动操作时，AI 要说明具体步骤。
 
-## Shadowrocket 原生验收
+这个流程用于个人或极少数受信任设备。服务器 IP 通常属于数据中心；独立使用一个 IP，不代表它是住宅 IP，也不能保证所有网站都允许访问。
 
-macOS Shadowrocket 路径已经真实验证，但不把“导入成功”视为可用：
+默认不把管理面板和订阅端口开放到公网。每台新服务器生成独立凭证；配置与备份保存在本机受限文件中。
 
-- 新节点 IP 先排除 TUN 回环；
-- 导入后回读节点保存态；
-- 节点测试必须产生真实连接证据；
-- 建立只指向新节点的临时验收组；
-- 出口 IP、Google、OpenAI、Claude 和下载都要有运行日志证明命中新节点；
-- 独立 Xray 成功不能替代 Shadowrocket 原生成功。
+## 哪些环境已经验证
 
-## 费用与购买边界
+| 环境 | 当前验证范围 |
+| --- | --- |
+| 腾讯云海外服务器、Ubuntu 24.04 | 东京和硅谷有实际搭建与连接测试记录 |
+| AlmaLinux 9.7 服务器 | 有实际搭建、客户端连接和指定网站分流测试记录 |
+| Mac + 小火箭（Shadowrocket） | 已在真实设备验证连接、出口和测试网站的访问路径 |
+| Clash/Mihomo、Windows v2rayN | 已核对相关功能和配置说明，仍需在具体设备上测试 |
+| 其他客户端或系统 | 先检查当前版本是否支持所需功能，再做现场验证 |
 
-Skill 本身免费开源，VPS、客户端、换 IP 或额外流量可能收费。AI 会在开始前列出当前官方价格、首购、续费、周期、自动续费、独立 IPv4、流量、退款与可选费用；每次付款前再次说明。付款、实名、验证码和下单由用户本人完成。
+默认技术方案是 **VLESS + Reality + Vision，TCP 443**；使用 Xray 处理连接，3X-UI 管理服务。新手可以让 AI 处理这些参数，维护者可查阅下方技术说明。
 
-标称带宽通常是峰值或共享资源池能力，不是稳定吞吐承诺。最终只报告真实测试条件和结果。
+2026-10-12 实测通过的一组版本是：AlmaLinux 9.7、3X-UI 3.9.0、Xray 26.7.11、Shadowrocket 2.2.92（3445）。Xray 26.7.11 是官方预发布版本，仅作为这组环境的实测记录；部署前仍需核对当前版本组合。本次没有测试 Claude。
 
-## 目录
+## v0.6.0 重点改进
 
-```text
-SKILL.md
-agents/openai.yaml
-references/
-  provider-selection.md
-  client-adapters.md
-  reality-compatibility.md
-  shadowrocket.md
-  troubleshooting.md
-  security-and-acceptance.md
-  tencent-lighthouse.md
-  device-handoff.md
-  clash-mihomo.md
-  windows.md
-scripts/
-  audit-server.sh
-  preflight-reality.sh
-  diagnose-node.sh
-  run-debug-window.sh
-  redact-debug-log.py
-  verify-client.sh
-  build-transfer-package.sh
-  backup-xui.sh
-  test-skill.sh
-  validate-public.sh
-```
+- **安装前先查兼容性。** 支持同一种协议，不代表当前服务器和客户端版本能配合使用。
+- **首次失败就查两端记录。** 已确认服务器收到连接后，继续查连接建立过程，不反复检查端口。
+- **停止无效重复。** 同一动作两次失败且没有新线索，就换成能区分原因的检查。
+- **保护主连接。** 测试使用独立分组；没有备用连接和恢复条件时，不重建正在用的网络。
+- **按要求测试。** 默认验证出口和一个网页目标；用户暂不测某个服务时，跳过对应请求。
 
-## 常用脚本
+脚本已通过 45 项离线行为检查，覆盖错误分类、无效抓包拒绝、测试目标选择、日志脱敏和恢复条件。离线检查不能替代新服务器、新设备和当地线路的实际测试。
+
+## 技术说明与辅助脚本
+
+需要维护、排障或修改 Skill 时，按当前问题查阅：
+
+| 要查的内容 | 对应文件 |
+| --- | --- |
+| AI 的完整执行流程 | [SKILL.md](SKILL.md) |
+| 服务器选购和价格核对 | [供应商选择](references/provider-selection.md) |
+| 客户端与核心版本是否兼容 | [Reality 兼容说明](references/reality-compatibility.md) |
+| 小火箭导入、测试和日志 | [Shadowrocket 接入](references/shadowrocket.md) |
+| 按连接失败的环节排查 | [故障排查](references/troubleshooting.md) |
+| 凭证保护、恢复和验收 | [安全与验收](references/security-and-acceptance.md) |
+| 其他客户端和跨设备 | [客户端适配](references/client-adapters.md)、[文件交付](references/device-handoff.md) |
+
+`scripts/` 中包含服务器检查、配置预检、客户端测试、日志脱敏、备份和恢复条件检查工具。配置检查通过只证明结构正确，仍需实际连接测试。具体参数可查看脚本的用法说明，由 AI 按当前环境选择执行。
+
+<details>
+<summary>维护者：客户端测试与公开版本检查示例</summary>
+
+从仓库根目录运行。下面的本地代理地址和 `VPS_PUBLIC_IP` 需要替换为实际值；`1082` 只是示例端口。
 
 ```bash
-# 只读服务器审计
-sudo bash scripts/audit-server.sh
-
-# Reality 有效配置预检，只输出结构和哈希
-bash scripts/preflight-reality.sh --config /path/to/effective-config.json
-
-# 根据已知证据选择下一条诊断分支
-bash scripts/diagnose-node.sh \
-  --server-received clienthello \
-  --reality failed \
-  --vless unknown \
-  --exit unknown \
-  --effective-config yes \
-  --contaminated no \
-  --restored yes
-
-# 验证本地代理出口与目标服务
+# 通过指定本地代理测试出口和 Google，明确跳过 Claude
 bash scripts/verify-client.sh \
   --proxy socks5h://127.0.0.1:1082 \
-  --expected-ip <VPS_IP> \
-  --json-output /path/to/result.json
+  --expected-ip 'VPS_PUBLIC_IP' \
+  --skip-claude
 
-# 备份 3X-UI 数据库
-sudo bash scripts/backup-xui.sh /path/to/x-ui-backup.db
-```
-
-## v0.6.0：先找原因，减少重复操作
-
-- 安装前核对服务端核心与用户客户端的版本组合，不默认使用安装器最新核心。
-- 首次连接失败读取同一次请求的两端诊断日志；TCP 已通时直接查握手。
-- 同参数下 Xray 能通而 Shadowrocket/sing-box 失败时，优先检查握手兼容。
-- 同一动作两次失败且无新证据时停止重复；通过节点、出口和指定分流后交付。
-- 只把少量测试域名送到独立分组，保留主连接；缺少备用路径或恢复条件时不重建。
-- HTTP 测试默认只验证出口与 Google，可用 `--targets exit,google,openai` 选择目标，`--skip-claude` 明确禁止 Claude 请求。
-
-新增只读诊断读取和恢复条件检查工具：
-
-```bash
-python3 scripts/read-shadowrocket-diagnostics.py --since <ISO时间> --node-name <名称>
-bash scripts/check-reload-safety.sh --evidence /path/to/recovery-evidence.json
-```
-
-服务端预检只证明配置结构成立，HTTP 测试仍需原生分流日志来证明请求用了新节点。45 项离线行为检查覆盖兼容分支、抓包时间错位、目标跳过、代理环境排除、日志脱敏和恢复；这些检查不替代新设备的真实验收。
-
-## 已验证范围
-
-- 腾讯云轻量 Ubuntu 24.04、3X-UI/Xray、VLESS Reality Vision：东京与硅谷真实案例；
-- 2026-10-12：AlmaLinux 9.7、3X-UI 3.9.0、Xray 26.7.11、macOS Shadowrocket 2.2.92（3445）通过原生请求、出口与独立分流。26.7.11 是官方预发布版本，仅作为此组合的实测候选；本次没有测试 Claude。
-- macOS Shadowrocket 原生节点、独立分流、出口和目标服务：A 已实测；
-- Clash/Mihomo、Windows v2rayN：B/C，按当前内核和设备现场验证；
-- 线路、IP 信誉和晚高峰：始终现场测试，不承诺永久稳定。
-
-## 隐私与安全
-
-- 仓库不包含真实私钥、密码、UUID、Reality 私钥、short ID、Token、节点 URI 或数据库正文；
-- 敏感交付物只保存在本机，权限使用 `600`；
-- 3X-UI 面板与订阅端口默认不公开；
-- 独立节点 URI 不等于公网订阅；
-- 会占用正式 443 的调试必须由服务器本地看门狗自动恢复并对日志脱敏；
-- 退款、销毁和停用旧节点始终由用户确认。
-
-## 验证公开版本
-
-```bash
+# 检查公开包：脚本语法、离线测试、敏感信息、版本与备份
 bash scripts/validate-public.sh
 ```
 
-公开校验覆盖 Skill 结构、脚本语法与测试、敏感文件和字面量扫描、SQLite 热备份以及发布元数据一致性。
+客户端测试还需结合运行日志，确认请求确实经过新节点。公开包检查不修改现有网络，也不连接你的服务器。
 
-## 作者与许可
+</details>
 
-**[Nar / 那不然](https://github.com/Nar101)**
+## 遇到问题或参与改进
 
-我在持续实践一件事：让 AI 从一次性回答，走向理解真实环境、遵守操作边界、执行并验证结果。这个 Skill 是其中一个可公开复用的真实样本。
+可以在 [GitHub Issues](https://github.com/Nar101/deploy-private-proxy-node/issues) 说明：你使用的系统和客户端版本、想完成的任务、卡在哪一步，以及经过脱敏的报错。提交前移除私钥、密码、Token、UUID 和完整节点链接。
 
-[MIT License](./LICENSE)
+欢迎按 [MIT License](LICENSE) 使用、修改和再发布。再分发时，请保留原始版权声明与许可证；署名信息见 [NOTICE](NOTICE) 和 [CITATION.cff](CITATION.cff)。
