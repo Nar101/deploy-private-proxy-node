@@ -4,13 +4,13 @@
 
 这个 Skill 面向不懂服务器、但希望拥有个人独立出口的人。你说明预算、所在地区、设备和主要用途；AI 负责比较 VPS、核对费用、部署服务端、适配客户端、独立分流、真实验收、备份和跨设备交付。付款、实名、验证码、断流和关键安全动作始终由你确认。
 
-**Created by [Nar / 那不然](https://github.com/Nar101)** · [v0.5.0 Release](https://github.com/Nar101/deploy-private-proxy-node/releases/tag/v0.5.0)
+**Created by [Nar / 那不然](https://github.com/Nar101)** · [v0.6.0 Release](https://github.com/Nar101/deploy-private-proxy-node/releases/tag/v0.6.0)
 
 本项目只处理个人或极少数受信任设备的合法使用，不搭机场、不售卖、不开放注册或公网订阅。
 
-## v0.5.0 解决了什么
+## v0.6.0 解决了什么
 
-旧流程容易停在“服务器安装成功”，但用户的 Shadowrocket 或其他客户端仍不可用。v0.5.0 把购买后的交付重构为七个证据门：
+旧流程容易停在“服务器安装成功”，但用户的 Shadowrocket 或其他客户端仍不可用。v0.6.0 把购买后的交付重构为七个证据门：
 
 ```text
 G0 采购确认
@@ -156,9 +156,28 @@ bash scripts/verify-client.sh \
 sudo bash scripts/backup-xui.sh /path/to/x-ui-backup.db
 ```
 
+## v0.6.0：先找原因，减少重复操作
+
+- 安装前核对服务端核心与用户客户端的版本组合，不默认使用安装器最新核心。
+- 首次连接失败读取同一次请求的两端诊断日志；TCP 已通时直接查握手。
+- 同参数下 Xray 能通而 Shadowrocket/sing-box 失败时，优先检查握手兼容。
+- 同一动作两次失败且无新证据时停止重复；通过节点、出口和指定分流后交付。
+- 只把少量测试域名送到独立分组，保留主连接；缺少备用路径或恢复条件时不重建。
+- HTTP 测试默认只验证出口与 Google，可用 `--targets exit,google,openai` 选择目标，`--skip-claude` 明确禁止 Claude 请求。
+
+新增只读诊断读取和恢复条件检查工具：
+
+```bash
+python3 scripts/read-shadowrocket-diagnostics.py --since <ISO时间> --node-name <名称>
+bash scripts/check-reload-safety.sh --evidence /path/to/recovery-evidence.json
+```
+
+服务端预检只证明配置结构成立，HTTP 测试仍需原生分流日志来证明请求用了新节点。45 项离线行为检查覆盖兼容分支、抓包时间错位、目标跳过、代理环境排除、日志脱敏和恢复；这些检查不替代新设备的真实验收。
+
 ## 已验证范围
 
 - 腾讯云轻量 Ubuntu 24.04、3X-UI/Xray、VLESS Reality Vision：东京与硅谷真实案例；
+- 2026-10-12：AlmaLinux 9.7、3X-UI 3.9.0、Xray 26.7.11、macOS Shadowrocket 2.2.92（3445）通过原生请求、出口与独立分流。26.7.11 是官方预发布版本，仅作为此组合的实测候选；本次没有测试 Claude。
 - macOS Shadowrocket 原生节点、独立分流、出口和目标服务：A 已实测；
 - Clash/Mihomo、Windows v2rayN：B/C，按当前内核和设备现场验证；
 - 线路、IP 信誉和晚高峰：始终现场测试，不承诺永久稳定。

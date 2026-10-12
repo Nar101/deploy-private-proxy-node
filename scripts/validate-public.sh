@@ -13,6 +13,7 @@ required=(
   scripts/audit-server.sh scripts/preflight-reality.sh scripts/diagnose-node.sh
   scripts/run-debug-window.sh scripts/redact-debug-log.py scripts/verify-client.sh
   scripts/build-transfer-package.sh scripts/backup-xui.sh scripts/test-skill.sh
+  scripts/read-shadowrocket-diagnostics.py scripts/check-reload-safety.sh
 )
 
 for path in "${required[@]}"; do
@@ -23,7 +24,7 @@ for script in "$root"/scripts/*.sh; do
   bash -n "$script"
 done
 PYTHONPYCACHEPREFIX="${TMPDIR:-/tmp}/private-proxy-pycache" \
-  python3 -m py_compile "$root/scripts/redact-debug-log.py"
+  python3 -m py_compile "$root/scripts/redact-debug-log.py" "$root/scripts/read-shadowrocket-diagnostics.py"
 bash "$root/scripts/test-skill.sh"
 
 if find "$root" -path "$root/.git" -prune -o -type f \
@@ -34,12 +35,12 @@ if find "$root" -path "$root/.git" -prune -o -type f \
 fi
 
 secret_pattern='(vless|ss|trojan)://|BEGIN (OPENSSH |RSA |EC )?PRIVATE KEY|ssh-(rsa|ed25519) AAAA|[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|/Users/[A-Za-z0-9._-]+|/home/[A-Za-z0-9._-]+|~/Downloads'
-if grep -REnI --exclude-dir=.git --exclude='validate-public.sh' --exclude='test-skill.sh' --exclude='redact-debug-log.py' --exclude='build-transfer-package.sh' "$secret_pattern" "$root"; then
+if grep -REnI --exclude-dir=.git --exclude='.git' --exclude='validate-public.sh' --exclude='test-skill.sh' --exclude='redact-debug-log.py' --exclude='build-transfer-package.sh' "$secret_pattern" "$root"; then
   echo 'High-risk literal found in the release tree.' >&2
   exit 1
 fi
 
-public_ips="$({ grep -REhoI --exclude-dir=.git --exclude='validate-public.sh' --exclude='test-skill.sh' '([0-9]{1,3}\.){3}[0-9]{1,3}' "$root" || true; } | sort -u)"
+public_ips="$({ grep -REhoI --exclude-dir=.git --exclude='.git' --exclude='validate-public.sh' --exclude='test-skill.sh' '([0-9]{1,3}\.){3}[0-9]{1,3}' "$root" || true; } | sort -u)"
 while IFS= read -r ip; do
   [[ -z "$ip" ]] && continue
   case "$ip" in
@@ -48,9 +49,9 @@ while IFS= read -r ip; do
   esac
 done <<<"$public_ips"
 
-grep -q '^version: 0.5.0$' "$root/CITATION.cff"
-grep -q '当前 `v0.5.0`' "$root/SKILL.md"
-grep -q '/releases/tag/v0.5.0' "$root/README.md"
+grep -q '^version: 0.6.0$' "$root/CITATION.cff"
+grep -q '当前 `v0.6.0`' "$root/SKILL.md"
+grep -q '/releases/tag/v0.6.0' "$root/README.md"
 
 if command -v sqlite3 >/dev/null 2>&1; then
   tmpdir="$(mktemp -d)"

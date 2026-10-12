@@ -1,4 +1,6 @@
 interface:
   display_name: "搭建私人魔法节点"
   short_description: "购买海外VPS并直达原生客户端真实可用的安全私人节点"
-  default_prompt: "使用 $deploy-private-proxy-node，按交付门带我比较并购买海外 VPS，部署私人节点，完成原生客户端、独立分流、真实出口、目标服务、备份和跨设备文件交付；所有付费、断流和关键安全动作都先等我确认。"
+  default_prompt: "使用 $deploy-private-proxy-node，从当前已完成步骤继续配置私人节点。先核对版本兼容，首次失败就读两端诊断日志；用独立分组验证节点、出口和我选定的目标，保护主连接。复用已有具体授权，缺少恢复条件时不重建隧道；验证通过后清理并交付。"
+policy:
+  allow_implicit_invocation: false

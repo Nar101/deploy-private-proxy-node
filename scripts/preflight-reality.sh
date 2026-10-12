@@ -3,10 +3,13 @@ set -euo pipefail
 
 usage() {
   cat >&2 <<'EOF'
-Usage: preflight-reality.sh --config <effective-xray-config.json> [--xray-bin <path>] [--expected-port <port>]
-
-Reads the effective Xray JSON and reports only non-sensitive structure and hashes.
-It never prints UUIDs, Reality keys, short IDs, or complete share links.
+Usage: preflight-reality.sh --config <effective-xray-config.json> [options]
+  --xray-bin <path>       Default: xray
+  --expected-port <port>  Default: 443
+  --client-name <name>
+  --client-version <version>
+Checks structure only; compatibility requires an actual client handshake.
+Prints non-sensitive fields and hashes, never credentials.
 EOF
   exit 2
 }
@@ -14,93 +17,108 @@ EOF
 config=''
 xray_bin='xray'
 expected_port='443'
-
+client_name='unknown'
+client_version='unknown'
 while [[ $# -gt 0 ]]; do
+  [[ $# -ge 2 ]] || usage
   case "$1" in
-    --config) config="${2:-}"; shift 2 ;;
-    --xray-bin) xray_bin="${2:-}"; shift 2 ;;
-    --expected-port) expected_port="${2:-}"; shift 2 ;;
+    --config) config="$2" ;;
+    --xray-bin) xray_bin="$2" ;;
+    --expected-port) expected_port="$2" ;;
+    --client-name) client_name="$2" ;;
+    --client-version) client_version="$2" ;;
     *) usage ;;
   esac
+  shift 2
 done
-
-[[ -n "$config" && -r "$config" ]] || usage
-[[ "$expected_port" =~ ^[0-9]+$ ]] || usage
-
+[[ -r "$config" && "$expected_port" =~ ^[0-9]+$ ]] || usage
+xray_version='unavailable'
 if command -v "$xray_bin" >/dev/null 2>&1; then
-  xray_version="$($xray_bin version 2>/dev/null | sed -n '1p' || true)"
-else
-  xray_version='unavailable'
+  xray_version="$("$xray_bin" version 2>/dev/null | sed -n '1p' || true)"
 fi
-printf 'INFO xray_version=%s\n' "${xray_version:-unknown}"
 
-python3 - "$config" "$expected_port" <<'PY'
+python3 - "$config" "$expected_port" "$xray_version" "$client_name" "$client_version" <<'PY'
 import hashlib
 import json
+import re
 import sys
 
-path, expected_port = sys.argv[1], int(sys.argv[2])
-with open(path, encoding="utf-8") as fh:
-    data = json.load(fh)
+path, port, version_text, client_name, client_version = sys.argv[1:]
+port = int(port)
+if not 1 <= port <= 65535:
+    raise SystemExit('FAIL expected_port=invalid')
+try:
+    with open(path, encoding='utf-8') as fh:
+        data = json.load(fh)
+except (OSError, ValueError):
+    raise SystemExit('FAIL effective_config=unreadable_or_invalid')
+if not isinstance(data, dict) or not isinstance(data.get('inbounds'), list):
+    raise SystemExit('FAIL effective_config=inbounds_missing')
+
+version = re.search(r'\b\d+\.\d+\.\d+\b', version_text)
+core_version = version.group() if version else 'unknown'
+print(f'INFO xray_version={core_version}')
+print('INFO native_client_compatibility=unverified_requires_handshake')
+if (core_version == '26.9.30' and client_name.lower() == 'shadowrocket'
+        and client_version.startswith('2.2.92')):
+    print('WARN known_pair_failed=2026-10-12; inspect ClientHello key_share requirements before GUI work')
+
 
 def digest(value):
-    raw = json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    raw = json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(',', ':'))
     return hashlib.sha256(raw.encode()).hexdigest()[:12]
 
-inbounds = data.get("inbounds", [])
+
 reality = []
-for inbound in inbounds:
-    stream = inbound.get("streamSettings") or {}
-    if str(stream.get("security", "")).lower() != "reality":
-        continue
-    settings = stream.get("realitySettings") or {}
-    reality.append((inbound, settings))
-
+for inbound in data['inbounds']:
+    if not isinstance(inbound, dict):
+        raise SystemExit('FAIL inbound=invalid_structure')
+    stream = inbound.get('streamSettings') or {}
+    if not isinstance(stream, dict):
+        raise SystemExit('FAIL stream_settings=invalid_structure')
+    if str(stream.get('security', '')).lower() == 'reality':
+        reality.append((inbound, stream, stream.get('realitySettings') or {}))
 if not reality:
-    print("FAIL reality_inbound=missing")
-    raise SystemExit(1)
+    raise SystemExit('FAIL reality_inbound=missing')
 if len(reality) > 1:
-    print(f"WARN reality_inbound_count={len(reality)}")
-
+    print(f'WARN reality_inbound_count={len(reality)}')
 failed = False
-for index, (inbound, settings) in enumerate(reality):
-    port = inbound.get("port")
-    protocol = inbound.get("protocol")
-    target = settings.get("target") or settings.get("dest")
-    names = settings.get("serverNames") or []
-    short_ids = settings.get("shortIds") or []
-    clients = ((inbound.get("settings") or {}).get("clients") or [])
-    private_key = settings.get("privateKey")
-    min_client = settings.get("minClientVer")
-    max_client = settings.get("maxClientVer")
-
-    print(f"INFO inbound[{index}].protocol={protocol or 'missing'}")
-    print(f"{'PASS' if port == expected_port else 'FAIL'} inbound[{index}].port={port}")
-    print(f"{'PASS' if target else 'FAIL'} inbound[{index}].target_present={'yes' if target else 'no'}")
-    print(f"{'PASS' if names else 'FAIL'} inbound[{index}].server_names={len(names)}")
-    print(f"{'PASS' if private_key else 'FAIL'} inbound[{index}].private_key_present={'yes' if private_key else 'no'}")
-    print(f"{'PASS' if short_ids else 'FAIL'} inbound[{index}].short_ids={len(short_ids)}")
-    print(f"{'PASS' if clients else 'FAIL'} inbound[{index}].clients={len(clients)}")
-    if private_key:
-        print(f"INFO inbound[{index}].private_key_sha256={digest(private_key)}")
-    if short_ids:
-        print(f"INFO inbound[{index}].short_ids_sha256={digest(short_ids)}")
-    if clients:
-        client_ids = [client.get("id") for client in clients if client.get("id")]
-        flows = sorted({client.get("flow", "") for client in clients})
-        print(f"INFO inbound[{index}].client_ids_sha256={digest(client_ids)}")
-        print(f"INFO inbound[{index}].flows={','.join(flows) if flows else 'missing'}")
-
-    if min_client in (None, ""):
-        print(f"WARN inbound[{index}].min_client_ver=unset; current Xray may apply its own default minimum")
+for index, (inbound, stream, settings) in enumerate(reality):
+    if not isinstance(settings, dict) or not isinstance(inbound.get('settings'), dict):
+        raise SystemExit('FAIL reality_settings=invalid_structure')
+    names = settings.get('serverNames') or []
+    ids = settings.get('shortIds') or []
+    clients = inbound['settings'].get('clients') or []
+    clients_ok = isinstance(clients, list) and bool(clients) and all(
+        isinstance(c, dict) and isinstance(c.get('id'), str) and bool(c['id'])
+        and c.get('enable', True) is True and c.get('flow') == 'xtls-rprx-vision'
+        for c in clients
+    )
+    checks = {
+        'port': inbound.get('port') == port,
+        'vless': inbound.get('protocol') == 'vless',
+        'tcp': stream.get('network', 'tcp') in ('tcp', 'raw'),
+        'enabled': inbound.get('enable', True) is True,
+        'target_present': bool(settings.get('target') or settings.get('dest')),
+        'server_names': isinstance(names, list) and bool(names) and all(isinstance(n, str) and n for n in names),
+        'private_key_present': isinstance(settings.get('privateKey'), str) and bool(settings['privateKey']),
+        'short_ids': isinstance(ids, list) and bool(ids) and all(isinstance(s, str) for s in ids),
+        'active_vless_vision_clients': clients_ok,
+    }
+    for name, ok in checks.items():
+        print(f'{"PASS" if ok else "FAIL"} inbound[{index}].{name}={"yes" if ok else "no"}')
+    failed |= not all(checks.values())
+    if checks['private_key_present']:
+        print(f'INFO inbound[{index}].private_key_sha256={digest(settings["privateKey"])}')
+    if checks['short_ids']:
+        print(f'INFO inbound[{index}].short_ids_sha256={digest(ids)}')
+    if clients_ok:
+        print(f'INFO inbound[{index}].client_ids_sha256={digest([c["id"] for c in clients])}')
+    if settings.get('minClientVer') in (None, ''):
+        print(f'WARN inbound[{index}].min_client_ver=unset_version_dependent; check installed source or handshake log')
     else:
-        print(f"INFO inbound[{index}].min_client_ver={min_client}")
-    print(f"INFO inbound[{index}].max_client_ver={max_client or 'unset'}")
-
-    if port != expected_port or not target or not names or not private_key or not short_ids or not clients:
-        failed = True
-
+        print(f'INFO inbound[{index}].min_client_ver=explicit; does not prove ClientHello feature compatibility')
 if failed:
     raise SystemExit(1)
-print("PASS reality_preflight=complete")
+print('PASS config_structure=valid')
 PY

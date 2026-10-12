@@ -1,20 +1,19 @@
 #!/usr/bin/env bash
 set -euo pipefail
-
 usage() {
   cat >&2 <<'EOF'
-Usage: diagnose-node.sh \
-  --server-received none|tcp|clienthello \
-  --reality unknown|failed|passed \
-  --vless unknown|failed|passed \
-  --exit unknown|wrong|expected \
-  --effective-config yes|no \
-  --contaminated yes|no \
-  --restored yes|no
+Usage: diagnose-node.sh
+  --server-received unknown|none|tcp|clienthello
+  --reality unknown|failed|passed --vless unknown|failed|passed
+  --exit unknown|wrong|expected --effective-config yes|no
+  --contaminated yes|no --restored yes|no
+  [--observation-valid yes|no] (default no; required for none)
+  [--isolated-client unknown|failed|passed] [--native-client unknown|failed|passed]
+  [--same-parameters unknown|yes|no]
+Observation must cover the same request. Protocol states refer to the failing client.
 EOF
   exit 2
 }
-
 server_received=''
 reality=''
 vless=''
@@ -22,90 +21,104 @@ exit_state=''
 effective_config=''
 contaminated=''
 restored=''
-
+observation_valid='no'
+isolated_client='unknown'
+native_client='unknown'
+same_parameters='unknown'
 while [[ $# -gt 0 ]]; do
+  [[ $# -ge 2 ]] || usage
   case "$1" in
-    --server-received) server_received="${2:-}"; shift 2 ;;
-    --reality) reality="${2:-}"; shift 2 ;;
-    --vless) vless="${2:-}"; shift 2 ;;
-    --exit) exit_state="${2:-}"; shift 2 ;;
-    --effective-config) effective_config="${2:-}"; shift 2 ;;
-    --contaminated) contaminated="${2:-}"; shift 2 ;;
-    --restored) restored="${2:-}"; shift 2 ;;
+    --server-received) server_received="$2" ;;
+    --reality) reality="$2" ;;
+    --vless) vless="$2" ;;
+    --exit) exit_state="$2" ;;
+    --effective-config) effective_config="$2" ;;
+    --contaminated) contaminated="$2" ;;
+    --restored) restored="$2" ;;
+    --observation-valid) observation_valid="$2" ;;
+    --isolated-client) isolated_client="$2" ;;
+    --native-client) native_client="$2" ;;
+    --same-parameters) same_parameters="$2" ;;
     *) usage ;;
   esac
+  shift 2
 done
-
-[[ "$server_received" =~ ^(none|tcp|clienthello)$ ]] || usage
-[[ "$reality" =~ ^(unknown|failed|passed)$ ]] || usage
-[[ "$vless" =~ ^(unknown|failed|passed)$ ]] || usage
+[[ "$server_received" =~ ^(unknown|none|tcp|clienthello)$ ]] || usage
+for result in "$reality" "$vless" "$isolated_client" "$native_client"; do
+  [[ "$result" =~ ^(unknown|failed|passed)$ ]] || usage
+done
 [[ "$exit_state" =~ ^(unknown|wrong|expected)$ ]] || usage
-[[ "$effective_config" =~ ^(yes|no)$ ]] || usage
-[[ "$contaminated" =~ ^(yes|no)$ ]] || usage
-[[ "$restored" =~ ^(yes|no)$ ]] || usage
-
-if [[ "$contaminated" == 'yes' ]]; then
-  echo 'INVALID test_evidence=contaminated'
-  echo 'NEXT restore formal port, service, route, node object, and rule state; then repeat one synchronized test'
-  exit 1
-fi
-
-if [[ "$restored" == 'no' ]]; then
+for flag in "$effective_config" "$contaminated" "$restored" "$observation_valid"; do
+  [[ "$flag" =~ ^(yes|no)$ ]] || usage
+done
+[[ "$same_parameters" =~ ^(unknown|yes|no)$ ]] || usage
+if [[ "$restored" == no ]]; then
   echo 'STOP formal_state=not_restored'
-  echo 'NEXT restore and verify the production service before any new hypothesis'
+  echo 'NEXT restore and verify formal service and main client before any new hypothesis'
   exit 1
 fi
-
-if [[ "$server_received" == 'none' ]]; then
-  if [[ "$reality" != 'unknown' || "$vless" != 'unknown' ]]; then
-    echo 'INVALID contradiction=protocol_result_without_server_connection'
-    exit 1
-  fi
+if [[ "$contaminated" == yes ]]; then
+  echo 'INVALID test_evidence=contaminated'
+  echo 'NEXT discard this result; repeat one synchronized test after verifying formal state'
+  exit 1
+fi
+if [[ "$server_received" == none && "$observation_valid" != yes ]]; then
+  echo 'INVALID no_connection_claim=unsynchronized_observation'
+  echo 'NEXT use server-received unknown; read paired client/server logs before changing routes'
+  exit 1
+fi
+if [[ "$vless" == passed && "$reality" != passed ]] ||
+   [[ "$exit_state" != unknown && "$vless" != passed ]] ||
+   [[ "$server_received" == none && ( "$reality" != unknown || "$vless" != unknown ) ]]; then
+  echo 'INVALID contradiction=protocol_evidence'
+  exit 1
+fi
+if [[ "$server_received" == unknown ]]; then
+  echo 'BRANCH synchronized_observation'
+  echo 'NEXT read the failing client diagnostic and server log for one timed request; do not infer none from a late capture'
+  exit 0
+fi
+if [[ "$server_received" == none ]]; then
   echo 'BRANCH pre_server_path'
-  echo 'NEXT verify instance/IP, cloud firewall, TUN exclusion route, saved node object, and tunnel runtime snapshot'
+  echo 'NEXT verify instance/IP, cloud firewall, physical TUN exclusion, saved node and runtime snapshot'
   exit 0
 fi
-
-if [[ "$effective_config" == 'no' ]]; then
+if [[ "$effective_config" == no ]]; then
   echo 'BRANCH effective_config_unknown'
-  echo 'NEXT read the Xray configuration actually loaded by the running process before changing parameters'
+  echo 'NEXT read the configuration loaded by the running Xray before changing parameters'
   exit 0
 fi
-
-if [[ "$reality" == 'failed' ]]; then
-  echo 'BRANCH reality_authentication'
-  echo 'NEXT compare credential hashes, SNI, short ID, time, ClientVer boundaries, and fallback evidence'
+if [[ "$isolated_client" == passed && "$native_client" == failed && "$same_parameters" == yes && "$reality" != passed ]]; then
+  echo 'BRANCH handshake_compatibility'
+  echo 'NEXT compare ClientHello key_share requirements and exact core/client versions; relaxing minClientVer cannot supply missing fields'
   exit 0
 fi
-
-if [[ "$reality" == 'unknown' ]]; then
-  echo 'BRANCH reality_observability'
-  echo 'NEXT run one synchronized, watchdog-protected Reality debug window'
-  exit 0
-fi
-
-if [[ "$vless" == 'failed' ]]; then
-  echo 'BRANCH vless_xtls'
-  echo 'NEXT compare UUID hash, Vision flow, TCP, and client serialization; do not change Reality target'
-  exit 0
-fi
-
-if [[ "$vless" == 'unknown' ]]; then
-  echo 'BRANCH vless_observability'
-  echo 'NEXT collect the native client and server log for the same connection'
-  exit 0
-fi
-
+case "$reality" in
+  failed)
+    echo 'BRANCH reality_authentication'
+    echo 'NEXT compare credential hashes, SNI, time, key_share features, ClientVer and fallback in paired logs'
+    exit 0 ;;
+  unknown)
+    echo 'BRANCH reality_observability'
+    echo 'NEXT read client diagnostics first; if server logs are absent use one watchdog-protected debug window'
+    exit 0 ;;
+esac
+case "$vless" in
+  failed)
+    echo 'BRANCH vless_xtls'
+    echo 'NEXT compare VLESS credential hash, Vision flow, TCP and client serialization'
+    exit 0 ;;
+  unknown)
+    echo 'BRANCH vless_observability'
+    echo 'NEXT collect native client and server logs for the same connection'
+    exit 0 ;;
+esac
 case "$exit_state" in
   wrong)
     echo 'BRANCH routing_policy'
-    echo 'NEXT inspect rule order, selected configuration, proxy-group delegation, and runtime route log'
-    ;;
+    echo 'NEXT inspect rule order, selected config, group delegation and runtime route log' ;;
   unknown)
     echo 'BRANCH business_acceptance'
-    echo 'NEXT verify expected exit IP and target HTTP statuses through the native client'
-    ;;
-  expected)
-    echo 'PASS node_path=protocol_and_exit_verified'
-    ;;
+    echo 'NEXT verify exit and user-selected HTTP targets through the native client' ;;
+  expected) echo 'PASS node_path=protocol_and_exit_verified' ;;
 esac
